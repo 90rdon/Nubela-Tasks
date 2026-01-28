@@ -1,0 +1,7 @@
+{
+  "name": "Nebula Task",
+  "description": "A new-age AI-powered todo app with voice interaction and intelligent task breakdown.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
