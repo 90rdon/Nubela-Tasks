@@ -9,6 +9,7 @@ export interface Task {
   title: string;
   completed: boolean;
   isBreakingDown: boolean;
+  isExpanded: boolean;
   subTasks: SubTask[];
   createdAt: number;
 }

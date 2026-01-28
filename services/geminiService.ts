@@ -6,11 +6,15 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- Task Breakdown Service ---
 
-export const breakDownTask = async (taskTitle: string): Promise<string[]> => {
+export const breakDownTask = async (taskTitle: string, existingSteps: string[] = []): Promise<string[]> => {
   try {
+    const contextStr = existingSteps.length > 0 
+      ? `Current steps already present: ${existingSteps.join(', ')}. ` 
+      : '';
+      
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Break down the following task into 3 to 6 smaller, concrete, actionable steps. Keep them concise. Task: "${taskTitle}"`,
+      contents: `Break down the following task into 3 to 6 smaller, concrete, actionable steps. ${contextStr}If the existing steps are already good, you can suggest adding to them or providing a completely refreshed, more efficient list. Keep them concise. Task: "${taskTitle}"`,
       config: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -130,7 +134,7 @@ export class LiveSessionManager {
       name: 'decomposeTask',
       parameters: {
         type: Type.OBJECT,
-        description: 'Automatically generate subtasks for a main task. Use this when the user asks for a plan or breakdown.',
+        description: 'Automatically generate subtasks for a main task. Use this when the user asks for a plan, breakdown, or help starting. It considers existing subtasks if they exist.',
         properties: {
           taskTitle: {
             type: Type.STRING,
@@ -196,14 +200,20 @@ export class LiveSessionManager {
         responseModalities: [Modality.AUDIO],
         tools: [{ functionDeclarations: [getTasksTool, addTaskTool, addSubTaskTool, markTaskDoneTool, decomposeTaskTool, renameTaskTool, deleteTaskTool] }],
         systemInstruction: `You are Nebula, an AI productivity assistant.
-CONFIRMATION PROTOCOL:
-1. NO CONFIRMATION NEEDED for: Adding new tasks, adding new subtasks, marking items as done, or initial breakdowns of empty tasks.
-2. VERBAL CONFIRMATION REQUIRED for:
-   - DELETING any item (e.g., "Confirm you want to delete 'Email Boss'?")
-   - RENAMING any item (e.g., "Change 'Email Boss' to 'Call Boss', correct?")
-   - RE-DECOMPOSING (If a task ALREADY has subtasks, ask before replacing them: "This task already has steps. Should I generate a new plan and replace them?")
 
-Usage: Use 'getTasks' to check if a task is already broken down before you suggest a new breakdown.`,
+NEBULA CORE PROTOCOLS:
+1. DO NOT automatically decompose/break down a task when it is created.
+2. NO CONFIRMATION NEEDED for: 
+   - Adding new tasks ('addTask').
+   - Adding new subtasks ('addSubTask').
+   - Marking items as done ('markTaskDone').
+   - Initial breakdown of an empty task.
+3. VERBAL CONFIRMATION MANDATORY before calling tool for:
+   - DELETING any item.
+   - RENAMING any item.
+   - RE-DECOMPOSING: If 'getTasks' shows existing subtasks, you MUST ask for confirmation AND briefly explain WHY (e.g., "I see you have 3 steps, should I replace them with a more detailed plan?").
+
+CONTEXT AWARENESS: Use 'getTasks' to always see the current state. When breaking down a task that already has subtasks, integrate them or offer to refresh them. If refreshing/replacing, you MUST verify first.`,
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         }

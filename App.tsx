@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Mic, MicOff, Brain, Check, Trash2, ChevronDown, ChevronRight, Loader2, Play } from 'lucide-react';
+import { Plus, Mic, MicOff, Brain, Check, Trash2, ChevronDown, ChevronRight, Loader2, Play, Keyboard } from 'lucide-react';
 import { Task, SubTask, VisualizerMode } from './types';
 import { breakDownTask, LiveSessionManager } from './services/geminiService';
 import Orb from './components/Orb';
@@ -7,7 +7,7 @@ import Orb from './components/Orb';
 // --- Utility Components ---
 
 const Button = ({ children, onClick, variant = 'primary', className = '', disabled = false, icon: Icon }: any) => {
-  const base = "flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed";
+  const base = "flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation";
   const variants = {
     primary: "bg-nebula-600 hover:bg-nebula-500 text-white shadow-lg shadow-nebula-900/50",
     secondary: "bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700",
@@ -31,6 +31,9 @@ export default function App() {
   const [voiceMode, setVoiceMode] = useState<VisualizerMode>(VisualizerMode.IDLE);
   const [audioVolume, setAudioVolume] = useState(0);
   
+  // Local state for manual subtask inputs
+  const [subTaskInputs, setSubTaskInputs] = useState<Record<string, string>>({});
+
   // Refs
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const tasksRef = useRef<Task[]>([]); // To access latest tasks inside callbacks
@@ -59,6 +62,7 @@ export default function App() {
       title,
       completed: false,
       isBreakingDown: false,
+      isExpanded: true, // Default to expanded for new tasks
       subTasks: [],
       createdAt: Date.now()
     };
@@ -72,8 +76,31 @@ export default function App() {
     ));
   };
 
+  const toggleExpand = (taskId: string) => {
+    setTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, isExpanded: !t.isExpanded } : t
+    ));
+  };
+
   const deleteTask = (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  const addSubTaskManual = (taskId: string) => {
+    const title = subTaskInputs[taskId]?.trim();
+    if (!title) return;
+
+    const newSubTask: SubTask = {
+      id: crypto.randomUUID(),
+      title,
+      completed: false
+    };
+
+    setTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, subTasks: [...t.subTasks, newSubTask], isExpanded: true } : t
+    ));
+
+    setSubTaskInputs(prev => ({ ...prev, [taskId]: '' }));
   };
 
   const toggleSubTask = (taskId: string, subTaskId: string) => {
@@ -91,13 +118,18 @@ export default function App() {
   const handleBreakdown = async (taskId: string, title: string): Promise<string[]> => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isBreakingDown: true } : t));
     
-    const steps = await breakDownTask(title);
+    // Pass existing subtasks as context
+    const currentTask = tasksRef.current.find(t => t.id === taskId);
+    const existingSteps = currentTask?.subTasks.map(st => st.title) || [];
+    
+    const steps = await breakDownTask(title, existingSteps);
     
     setTasks(prev => prev.map(t => {
       if (t.id !== taskId) return t;
       return {
         ...t,
         isBreakingDown: false,
+        isExpanded: true,
         subTasks: steps.map(step => ({
           id: crypto.randomUUID(),
           title: step,
@@ -139,12 +171,13 @@ export default function App() {
         onError: (err) => {
           console.error("Voice Error", err);
           setIsVoiceActive(false);
+          setVoiceMode(VisualizerMode.IDLE);
         },
         onToolCall: async (name, args) => {
           if (name === 'getTasks') {
             return tasksRef.current.map(t => ({
               title: t.title,
-              subTasksCount: t.subTasks.length,
+              subTasks: t.subTasks.map(st => ({ title: st.title, completed: st.completed })),
               completed: t.completed
             }));
           }
@@ -162,7 +195,7 @@ export default function App() {
                 completed: false
               };
               setTasks(prev => prev.map(t => 
-                t.id === task.id ? { ...t, subTasks: [...t.subTasks, newSubTask] } : t
+                t.id === task.id ? { ...t, subTasks: [...t.subTasks, newSubTask], isExpanded: true } : t
               ));
               return { result: `Added subtask "${args.subTaskTitle}" to "${task.title}".` };
             }
@@ -198,7 +231,7 @@ export default function App() {
               status: "success",
               task: task.title,
               steps: steps,
-              message: `I've updated the breakdown for "${task.title}".`
+              message: `I've updated the plan for "${task.title}" based on your request.`
             };
           }
           if (name === 'renameTask') {
@@ -261,40 +294,40 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-void text-slate-200 font-sans selection:bg-nebula-500/30">
+    <div className="min-h-screen bg-void text-slate-200 font-sans selection:bg-nebula-500/30 touch-manipulation">
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-nebula-900/20 rounded-full blur-[100px] animate-float" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[120px] animate-pulse-slow" />
+        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-nebula-900/20 rounded-full blur-[100px] animate-float opacity-50 md:opacity-100" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[120px] animate-pulse-slow opacity-50 md:opacity-100" />
       </div>
 
       <div className="container mx-auto max-w-2xl px-4 py-8 md:py-12">
-        <header className="flex items-center justify-between mb-10">
+        <header className="flex items-center justify-between mb-8 md:mb-10">
           <div>
-            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-nebula-200 to-nebula-500 tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-nebula-200 to-nebula-500 tracking-tight">
               Nebula Task
             </h1>
-            <p className="text-slate-500 text-sm mt-1">AI-Enhanced Productivity</p>
+            <p className="text-slate-500 text-xs md:text-sm mt-1">AI-Enhanced Productivity</p>
           </div>
           <Button 
             variant={isVoiceActive ? "voice" : "secondary"} 
             onClick={toggleVoiceMode}
-            className="rounded-full w-12 h-12 !px-0 flex items-center justify-center border-2 border-transparent"
+            className="rounded-full w-12 h-12 md:w-14 md:h-14 !px-0 flex items-center justify-center border-2 border-transparent"
             title="Toggle Voice Mode"
           >
-            {isVoiceActive ? <MicOff className="animate-pulse" /> : <Mic />}
+            {isVoiceActive ? <MicOff className="animate-pulse" size={24} /> : <Mic size={24} />}
           </Button>
         </header>
 
         {isVoiceActive && (
-           <div className="mb-8 flex flex-col items-center justify-center p-6 glass-panel rounded-3xl animate-fade-in border-nebula-500/20 border">
+           <div className="mb-8 flex flex-col items-center justify-center p-6 glass-panel rounded-3xl animate-fade-in border-nebula-500/20 border shadow-2xl shadow-nebula-500/10">
               <Orb mode={voiceMode} volume={audioVolume} />
-              <p className="mt-4 text-nebula-300 font-medium tracking-widest text-xs uppercase opacity-80">
+              <p className="mt-4 text-nebula-300 font-medium tracking-widest text-[10px] md:text-xs uppercase opacity-80">
                  Nebula Live Active
               </p>
            </div>
         )}
 
-        <div className="mb-8 relative group">
+        <div className="mb-6 md:mb-8 relative group">
           <input
             type="text"
             value={newTaskTitle}
@@ -305,8 +338,8 @@ export default function App() {
                 setNewTaskTitle('');
               }
             }}
-            placeholder="What needs to be done?"
-            className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-6 pr-16 text-lg focus:outline-none focus:ring-2 focus:ring-nebula-500/50 focus:border-nebula-500/50 transition-all placeholder:text-slate-600"
+            placeholder="New task..."
+            className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-6 pr-16 text-base md:text-lg focus:outline-none focus:ring-2 focus:ring-nebula-500/50 focus:border-nebula-500/50 transition-all placeholder:text-slate-600 shadow-lg"
           />
           <button 
             onClick={() => {
@@ -315,26 +348,26 @@ export default function App() {
                 setNewTaskTitle('');
               }
             }}
-            className="absolute right-3 top-3 p-2 bg-nebula-600 rounded-xl text-white hover:bg-nebula-500 transition-colors disabled:opacity-0 disabled:scale-90"
+            className="absolute right-3 top-2.5 p-2 bg-nebula-600 rounded-xl text-white hover:bg-nebula-500 transition-colors disabled:opacity-0 disabled:scale-90 shadow-md"
             disabled={!newTaskTitle.trim()}
           >
-            <Plus size={20} />
+            <Plus size={22} />
           </button>
         </div>
 
         <div className="space-y-4">
           {tasks.length === 0 && (
-            <div className="text-center py-20 text-slate-600 italic">
+            <div className="text-center py-20 text-slate-600 italic animate-pulse">
               No tasks yet. Start typing or ask Nebula.
             </div>
           )}
           
           {tasks.map(task => (
-            <div key={task.id} className="group relative glass-panel rounded-2xl p-5 transition-all hover:border-slate-600/50">
-              <div className="flex items-start gap-4">
+            <div key={task.id} className={`group relative glass-panel rounded-2xl p-4 md:p-5 transition-all duration-300 ${task.isExpanded ? 'border-slate-600/50 ring-1 ring-slate-700/30 shadow-xl' : 'hover:border-slate-600/50'}`}>
+              <div className="flex items-start gap-3 md:gap-4">
                 <button 
                   onClick={() => toggleTask(task.id)}
-                  className={`mt-1 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                  className={`mt-1 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                     task.completed 
                     ? 'bg-nebula-500 border-nebula-500 text-white' 
                     : 'border-slate-600 hover:border-nebula-400'
@@ -343,57 +376,88 @@ export default function App() {
                   {task.completed && <Check size={14} strokeWidth={3} />}
                 </button>
                 
-                <div className="flex-1">
-                  <h3 className={`text-lg font-medium transition-all ${task.completed ? 'text-slate-500 line-through' : 'text-slate-100'}`}>
-                    {task.title}
-                  </h3>
-                  
-                  <div className="mt-3">
-                    {task.subTasks.length > 0 ? (
-                      <div className="pl-4 border-l-2 border-slate-800 space-y-2 mt-3">
-                        {task.subTasks.map(st => (
-                          <div key={st.id} className="flex items-center gap-3 text-sm">
-                            <button 
-                              onClick={() => toggleSubTask(task.id, st.id)}
-                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                st.completed ? 'bg-slate-600 border-slate-600' : 'border-slate-700 hover:border-slate-500'
-                              }`}
-                            >
-                              {st.completed && <Check size={10} />}
-                            </button>
-                            <span className={st.completed ? 'text-slate-600 line-through' : 'text-slate-300'}>
-                              {st.title}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      !task.completed && (
-                        <button 
-                        onClick={() => handleBreakdown(task.id, task.title)}
-                        disabled={task.isBreakingDown}
-                        className="text-xs font-medium text-nebula-400 flex items-center gap-1.5 hover:text-nebula-300 transition-colors mt-1 disabled:opacity-50"
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`text-base md:text-lg font-medium transition-all truncate ${task.completed ? 'text-slate-500 line-through' : 'text-slate-100'}`}>
+                      {task.title}
+                    </h3>
+                    {task.subTasks.length > 0 && (
+                      <button 
+                        onClick={() => toggleExpand(task.id)}
+                        className="text-slate-500 hover:text-nebula-400 transition-colors p-1"
                       >
-                        {task.isBreakingDown ? (
-                          <>
-                            <Loader2 size={12} className="animate-spin" />
-                            Nebula is thinking...
-                          </>
-                        ) : (
-                          <>
-                            <Brain size={12} />
-                            Break down with AI
-                          </>
-                        )}
+                        {task.isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </button>
-                      )
                     )}
                   </div>
+                  
+                  {task.isExpanded && (
+                    <div className="mt-3 overflow-hidden animate-fade-in">
+                      {task.subTasks.length > 0 && (
+                        <div className="pl-3 md:pl-4 border-l-2 border-slate-800 space-y-3 mb-4">
+                          {task.subTasks.map(st => (
+                            <div key={st.id} className="flex items-center gap-3 text-sm md:text-base group/sub">
+                              <button 
+                                onClick={() => toggleSubTask(task.id, st.id)}
+                                className={`w-4 h-4 md:w-5 md:h-5 rounded border flex items-center justify-center transition-all flex-shrink-0 ${
+                                  st.completed ? 'bg-slate-600 border-slate-600' : 'border-slate-700 hover:border-slate-500'
+                                }`}
+                              >
+                                {st.completed && <Check size={12} />}
+                              </button>
+                              <span className={`flex-1 ${st.completed ? 'text-slate-600 line-through italic' : 'text-slate-300'}`}>
+                                {st.title}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {!task.completed && (
+                        <div className="space-y-3">
+                          <div className="relative group/manual">
+                            <input 
+                              type="text"
+                              value={subTaskInputs[task.id] || ''}
+                              onChange={(e) => setSubTaskInputs(prev => ({ ...prev, [task.id]: e.target.value }))}
+                              onKeyDown={(e) => e.key === 'Enter' && addSubTaskManual(task.id)}
+                              placeholder="Add a step..."
+                              className="w-full bg-slate-800/30 border border-slate-700/50 rounded-xl py-2 pl-3 pr-10 text-xs md:text-sm focus:outline-none focus:ring-1 focus:ring-nebula-500/50 transition-all placeholder:text-slate-600"
+                            />
+                            <button 
+                              onClick={() => addSubTaskManual(task.id)}
+                              className="absolute right-2 top-1.5 p-1 text-slate-500 hover:text-nebula-400 transition-colors"
+                            >
+                              <Plus size={16} />
+                            </button>
+                          </div>
+
+                          <button 
+                            onClick={() => handleBreakdown(task.id, task.title)}
+                            disabled={task.isBreakingDown}
+                            className="text-[10px] md:text-xs font-medium text-nebula-400 flex items-center gap-1.5 hover:text-nebula-300 transition-colors py-1 disabled:opacity-50"
+                          >
+                            {task.isBreakingDown ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin" />
+                                Analyzing...
+                              </>
+                            ) : (
+                              <>
+                                <Brain size={12} />
+                                {task.subTasks.length > 0 ? 'Refresh breakdown' : 'Break down with AI'}
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button 
                   onClick={() => deleteTask(task.id)}
-                  className="text-slate-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all"
+                  className="text-slate-600 hover:text-red-400 p-2 md:opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                 >
                   <Trash2 size={18} />
                 </button>
