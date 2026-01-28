@@ -68,6 +68,15 @@ export class LiveSessionManager {
     
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
+    const getTasksTool: FunctionDeclaration = {
+      name: 'getTasks',
+      parameters: {
+        type: Type.OBJECT,
+        description: 'Get a list of all current tasks and their subtasks to see the current state.',
+        properties: {},
+      }
+    };
+
     const addTaskTool: FunctionDeclaration = {
       name: 'addTask',
       parameters: {
@@ -121,7 +130,7 @@ export class LiveSessionManager {
       name: 'decomposeTask',
       parameters: {
         type: Type.OBJECT,
-        description: 'Breaks down a task into smaller subtasks automatically using AI. You MUST call this when the user asks for a breakdown or help planning.',
+        description: 'Automatically generate subtasks for a main task. Use this when the user asks for a plan or breakdown.',
         properties: {
           taskTitle: {
             type: Type.STRING,
@@ -136,7 +145,7 @@ export class LiveSessionManager {
       name: 'renameTask',
       parameters: {
         type: Type.OBJECT,
-        description: 'Rename an existing task or subtask. You MUST verbally confirm with the user before calling this tool.',
+        description: 'Rename an existing task or subtask.',
         properties: {
           keyword: {
             type: Type.STRING,
@@ -155,7 +164,7 @@ export class LiveSessionManager {
       name: 'deleteTask',
       parameters: {
         type: Type.OBJECT,
-        description: 'Delete/Remove a task or subtask from the list. You MUST verbally confirm with the user before calling this tool.',
+        description: 'Delete/Remove a task or subtask from the list.',
         properties: {
           keyword: {
             type: Type.STRING,
@@ -185,14 +194,16 @@ export class LiveSessionManager {
       },
       config: {
         responseModalities: [Modality.AUDIO],
-        tools: [{ functionDeclarations: [addTaskTool, addSubTaskTool, markTaskDoneTool, decomposeTaskTool, renameTaskTool, deleteTaskTool] }],
-        systemInstruction: `You are Nebula, a futuristic productivity AI.
-SAFETY RULES:
-1. For DELETING or RENAMING tasks/subtasks, you MUST ask the user for verbal confirmation (e.g., "Are you sure you want to delete 'Task Name'?") and only call the tool once they say yes.
-2. You do NOT need to ask for confirmation for adding tasks, adding subtasks, marking tasks as done, or decomposing tasks.
-3. When a user asks for a breakdown, use 'decomposeTask'.
-4. If a user wants to change a name, use 'renameTask' after confirmation.
-5. If a user wants to remove something, use 'deleteTask' after confirmation.`,
+        tools: [{ functionDeclarations: [getTasksTool, addTaskTool, addSubTaskTool, markTaskDoneTool, decomposeTaskTool, renameTaskTool, deleteTaskTool] }],
+        systemInstruction: `You are Nebula, an AI productivity assistant.
+CONFIRMATION PROTOCOL:
+1. NO CONFIRMATION NEEDED for: Adding new tasks, adding new subtasks, marking items as done, or initial breakdowns of empty tasks.
+2. VERBAL CONFIRMATION REQUIRED for:
+   - DELETING any item (e.g., "Confirm you want to delete 'Email Boss'?")
+   - RENAMING any item (e.g., "Change 'Email Boss' to 'Call Boss', correct?")
+   - RE-DECOMPOSING (If a task ALREADY has subtasks, ask before replacing them: "This task already has steps. Should I generate a new plan and replace them?")
+
+Usage: Use 'getTasks' to check if a task is already broken down before you suggest a new breakdown.`,
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         }
