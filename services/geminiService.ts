@@ -2,8 +2,6 @@ import { GoogleGenAI, Type, FunctionDeclaration, Modality, LiveServerMessage } f
 import { createPcmBlob, base64ToBytes, decodeAudioData } from "./audioUtils";
 
 // Initialize Gemini Client
-// NOTE: In a real production app, you might want to proxy this through a backend 
-// or use a short-lived token to protect the API key.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- Task Breakdown Service ---
@@ -70,7 +68,6 @@ export class LiveSessionManager {
     
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
-    // Tools definition for Voice Agent
     const addTaskTool: FunctionDeclaration = {
       name: 'addTask',
       parameters: {
@@ -105,7 +102,7 @@ export class LiveSessionManager {
       name: 'decomposeTask',
       parameters: {
         type: Type.OBJECT,
-        description: 'Breaks down a task into smaller subtasks. Use this when the user asks to help with a task, break it down, or plan it out.',
+        description: 'Breaks down a task into smaller subtasks. You MUST call this when the user asks for a breakdown or help planning. The tool will return the specific steps generated; you must use those steps in your verbal response to stay in sync with the UI.',
         properties: {
           taskTitle: {
             type: Type.STRING,
@@ -136,7 +133,7 @@ export class LiveSessionManager {
       config: {
         responseModalities: [Modality.AUDIO],
         tools: [{ functionDeclarations: [addTaskTool, markTaskDoneTool, decomposeTaskTool] }],
-        systemInstruction: "You are Nebula, a highly intelligent and efficient AI productivity assistant. You help the user manage their tasks. You are concise, encouraging, and futuristic.",
+        systemInstruction: "You are Nebula, a futuristic productivity AI. When a user asks to break down a task, ALWAYS use the 'decomposeTask' tool first. Once the tool returns the subtasks, describe them to the user. Do not make up your own steps; strictly use the ones returned by the tool to ensure you stay in sync with what the user sees on their screen.",
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         }
@@ -152,8 +149,6 @@ export class LiveSessionManager {
 
     this.processor.onaudioprocess = (e) => {
       const inputData = e.inputBuffer.getChannelData(0);
-      
-      // Calculate volume for visualizer
       let sum = 0;
       for (let i = 0; i < inputData.length; i++) {
         sum += inputData[i] * inputData[i];
@@ -175,51 +170,35 @@ export class LiveSessionManager {
   }
 
   private async handleServerMessage(message: LiveServerMessage) {
-    // Handle Audio
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio && this.outputAudioContext) {
-      // Use visualizer hook for output volume (simulated based on presence of audio)
-       this.callbacks.onVolumeLevel(0.5); // Mock activity for visualizer
-
+       this.callbacks.onVolumeLevel(0.5);
        this.nextStartTime = Math.max(this.outputAudioContext.currentTime, this.nextStartTime);
-       
-       const audioBuffer = await decodeAudioData(
-         base64ToBytes(base64Audio),
-         this.outputAudioContext,
-         24000
-       );
-
+       const audioBuffer = await decodeAudioData(base64ToBytes(base64Audio), this.outputAudioContext, 24000);
        const source = this.outputAudioContext.createBufferSource();
        source.buffer = audioBuffer;
        source.connect(this.outputAudioContext.destination);
        source.addEventListener('ended', () => {
          this.sources.delete(source);
-         // Visualizer idle
          this.callbacks.onVolumeLevel(0);
        });
-       
        source.start(this.nextStartTime);
        this.nextStartTime += audioBuffer.duration;
        this.sources.add(source);
     }
 
-    // Handle Interruption
     if (message.serverContent?.interrupted) {
       this.stopAllSources();
     }
 
-    // Handle Tool Calls
     if (message.toolCall) {
       for (const fc of message.toolCall.functionCalls) {
-        console.log("Tool call received:", fc.name, fc.args);
         let result: any = { status: 'ok' };
-        
         try {
           result = await this.callbacks.onToolCall(fc.name, fc.args);
         } catch (err) {
           result = { error: (err as Error).message };
         }
-
         if (this.sessionPromise) {
           this.sessionPromise.then(session => {
             session.sendToolResponse({
@@ -257,11 +236,5 @@ export class LiveSessionManager {
     if (this.outputAudioContext) {
       this.outputAudioContext.close();
     }
-    // Note: Live API session doesn't have an explicit 'disconnect' on the session object 
-    // exposed in the easy helper, but closing socket happens on cleanup naturally or if we drop ref.
-    // The library manages websocket closure if we let it go, but let's see if we can force close if needed.
-    // Ideally we assume session ends when we stop sending or navigate away.
-    // Actually, `ai.live.connect` returns a session but we can't easily close it from outside without the socket.
-    // We just clean up audio contexts to stop stream.
   }
 }

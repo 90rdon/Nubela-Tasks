@@ -88,7 +88,7 @@ export default function App() {
     }));
   };
 
-  const handleBreakdown = async (taskId: string, title: string) => {
+  const handleBreakdown = async (taskId: string, title: string): Promise<string[]> => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isBreakingDown: true } : t));
     
     const steps = await breakDownTask(title);
@@ -105,13 +105,14 @@ export default function App() {
         }))
       };
     }));
+
+    return steps;
   };
 
   // --- Voice Logic ---
 
   const toggleVoiceMode = async () => {
     if (isVoiceActive) {
-      // Disconnect
       if (liveSessionRef.current) {
         liveSessionRef.current.disconnect();
         liveSessionRef.current = null;
@@ -119,8 +120,7 @@ export default function App() {
       setIsVoiceActive(false);
       setVoiceMode(VisualizerMode.IDLE);
     } else {
-      // Connect
-      setVoiceMode(VisualizerMode.THINKING); // Initial connecting state
+      setVoiceMode(VisualizerMode.THINKING);
       
       const manager = new LiveSessionManager({
         onOpen: () => {
@@ -131,19 +131,10 @@ export default function App() {
           setIsVoiceActive(false);
           setVoiceMode(VisualizerMode.IDLE);
         },
-        onAudioData: () => {
-           // Handled internally in manager usually, but can be exposed
-        },
-        onTranscript: () => {
-          // Can display transcripts if needed
-        },
+        onAudioData: () => {},
+        onTranscript: () => {},
         onVolumeLevel: (vol) => {
           setAudioVolume(vol);
-          // Simple heuristic to switch mode visual
-          if (vol > 0.01) {
-             // If we are receiving audio from model, it's speaking. 
-             // If we are sending audio, we are listening (user speaking).
-          }
         },
         onError: (err) => {
           console.error("Voice Error", err);
@@ -156,7 +147,6 @@ export default function App() {
           }
           if (name === 'markTaskDone') {
              const keyword = args.keyword.toLowerCase();
-             // Use ref to get latest tasks state
              const task = tasksRef.current.find(t => t.title.toLowerCase().includes(keyword));
              if (task) {
                 toggleTask(task.id);
@@ -168,14 +158,20 @@ export default function App() {
             const titleToCheck = args.taskTitle.toLowerCase();
             let task = tasksRef.current.find(t => t.title.toLowerCase().includes(titleToCheck));
             
-            // If task doesn't exist, create it first
             if (!task) {
               task = addTask(args.taskTitle);
             }
 
-            // Trigger breakdown
-            await handleBreakdown(task.id, task.title);
-            return { result: `Task "${task.title}" has been broken down into subtasks.` };
+            // Trigger breakdown and get the actual steps
+            const steps = await handleBreakdown(task.id, task.title);
+            
+            // Return the steps to the model so it can read them out correctly
+            return { 
+              status: "success",
+              task: task.title,
+              steps: steps,
+              message: `I've broken down "${task.title}" into ${steps.length} steps. You can see them in your task list now.`
+            };
           }
           return { error: 'Unknown tool' };
         }
@@ -193,16 +189,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-void text-slate-200 font-sans selection:bg-nebula-500/30">
-      
-      {/* Background Gradient Orbs */}
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-nebula-900/20 rounded-full blur-[100px] animate-float" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[120px] animate-pulse-slow" />
       </div>
 
       <div className="container mx-auto max-w-2xl px-4 py-8 md:py-12">
-        
-        {/* Header */}
         <header className="flex items-center justify-between mb-10">
           <div>
             <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-nebula-200 to-nebula-500 tracking-tight">
@@ -220,7 +212,6 @@ export default function App() {
           </Button>
         </header>
 
-        {/* Voice Visualizer Overlay */}
         {isVoiceActive && (
            <div className="mb-8 flex flex-col items-center justify-center p-6 glass-panel rounded-3xl animate-fade-in border-nebula-500/20 border">
               <Orb mode={voiceMode} volume={audioVolume} />
@@ -230,7 +221,6 @@ export default function App() {
            </div>
         )}
 
-        {/* Input Area */}
         <div className="mb-8 relative group">
           <input
             type="text"
@@ -259,7 +249,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* Task List */}
         <div className="space-y-4">
           {tasks.length === 0 && (
             <div className="text-center py-20 text-slate-600 italic">
@@ -286,7 +275,6 @@ export default function App() {
                     {task.title}
                   </h3>
                   
-                  {/* AI Breakdown Section */}
                   <div className="mt-3">
                     {task.subTasks.length > 0 ? (
                       <div className="pl-4 border-l-2 border-slate-800 space-y-2 mt-3">
