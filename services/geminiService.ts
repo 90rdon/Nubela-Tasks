@@ -106,11 +106,11 @@ export class LiveSessionManager {
       name: 'markTaskDone',
       parameters: {
         type: Type.OBJECT,
-        description: 'Mark a task as completed by matching its approximate title.',
+        description: 'Mark a task or a subtask as completed by matching its title or keyword.',
         properties: {
           keyword: {
              type: Type.STRING, 
-             description: 'A keyword to find the task to complete.' 
+             description: 'A keyword to find the task or subtask to complete.' 
           }
         },
         required: ['keyword']
@@ -132,6 +132,40 @@ export class LiveSessionManager {
       },
     };
 
+    const renameTaskTool: FunctionDeclaration = {
+      name: 'renameTask',
+      parameters: {
+        type: Type.OBJECT,
+        description: 'Rename an existing task or subtask. You MUST verbally confirm with the user before calling this tool.',
+        properties: {
+          keyword: {
+            type: Type.STRING,
+            description: 'The current name or keyword of the task/subtask to rename.',
+          },
+          newTitle: {
+            type: Type.STRING,
+            description: 'The new title for the task/subtask.',
+          }
+        },
+        required: ['keyword', 'newTitle']
+      }
+    };
+
+    const deleteTaskTool: FunctionDeclaration = {
+      name: 'deleteTask',
+      parameters: {
+        type: Type.OBJECT,
+        description: 'Delete/Remove a task or subtask from the list. You MUST verbally confirm with the user before calling this tool.',
+        properties: {
+          keyword: {
+            type: Type.STRING,
+            description: 'The name or keyword of the task/subtask to delete.',
+          }
+        },
+        required: ['keyword']
+      }
+    };
+
     this.sessionPromise = ai.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       callbacks: {
@@ -151,8 +185,14 @@ export class LiveSessionManager {
       },
       config: {
         responseModalities: [Modality.AUDIO],
-        tools: [{ functionDeclarations: [addTaskTool, addSubTaskTool, markTaskDoneTool, decomposeTaskTool] }],
-        systemInstruction: "You are Nebula, a futuristic productivity AI. You help users manage tasks and subtasks. Use 'addTask' for new main tasks, 'addSubTask' to add a specific step to an existing task, and 'decomposeTask' to automatically generate a full plan for a task. Always stay in sync with the user's list.",
+        tools: [{ functionDeclarations: [addTaskTool, addSubTaskTool, markTaskDoneTool, decomposeTaskTool, renameTaskTool, deleteTaskTool] }],
+        systemInstruction: `You are Nebula, a futuristic productivity AI.
+SAFETY RULES:
+1. For DELETING or RENAMING tasks/subtasks, you MUST ask the user for verbal confirmation (e.g., "Are you sure you want to delete 'Task Name'?") and only call the tool once they say yes.
+2. You do NOT need to ask for confirmation for adding tasks, adding subtasks, marking tasks as done, or decomposing tasks.
+3. When a user asks for a breakdown, use 'decomposeTask'.
+4. If a user wants to change a name, use 'renameTask' after confirmation.
+5. If a user wants to remove something, use 'deleteTask' after confirmation.`,
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         }

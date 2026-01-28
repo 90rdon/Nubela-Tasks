@@ -163,12 +163,24 @@ export default function App() {
           }
           if (name === 'markTaskDone') {
              const keyword = args.keyword.toLowerCase();
-             const task = tasksRef.current.find(t => t.title.toLowerCase().includes(keyword));
-             if (task) {
-                toggleTask(task.id);
-                return { result: `Marked task "${task.title}" as done.` };
+             
+             // First check main tasks
+             const taskMatch = tasksRef.current.find(t => t.title.toLowerCase().includes(keyword));
+             if (taskMatch) {
+                toggleTask(taskMatch.id);
+                return { result: `Marked task "${taskMatch.title}" as done.` };
              }
-             return { result: `Could not find a task matching "${args.keyword}".` };
+
+             // If no main task matches, search all subtasks
+             for (const mainTask of tasksRef.current) {
+                const subTaskMatch = mainTask.subTasks.find(st => st.title.toLowerCase().includes(keyword));
+                if (subTaskMatch) {
+                    toggleSubTask(mainTask.id, subTaskMatch.id);
+                    return { result: `Marked subtask "${subTaskMatch.title}" in "${mainTask.title}" as done.` };
+                }
+             }
+
+             return { result: `Could not find a task or subtask matching "${args.keyword}".` };
           }
           if (name === 'decomposeTask') {
             const titleToCheck = args.taskTitle.toLowerCase();
@@ -178,16 +190,67 @@ export default function App() {
               task = addTask(args.taskTitle);
             }
 
-            // Trigger breakdown and get the actual steps
             const steps = await handleBreakdown(task.id, task.title);
             
-            // Return the steps to the model so it can read them out correctly
             return { 
               status: "success",
               task: task.title,
               steps: steps,
               message: `I've broken down "${task.title}" into ${steps.length} steps. You can see them in your task list now.`
             };
+          }
+          if (name === 'renameTask') {
+            const keyword = args.keyword.toLowerCase();
+            const newTitle = args.newTitle;
+
+            // Search main tasks
+            const mainTask = tasksRef.current.find(t => t.title.toLowerCase().includes(keyword));
+            if (mainTask) {
+              setTasks(prev => prev.map(t => t.id === mainTask.id ? { ...t, title: newTitle } : t));
+              return { result: `Renamed task to "${newTitle}".` };
+            }
+
+            // Search subtasks
+            for (const t of tasksRef.current) {
+              const subTask = t.subTasks.find(st => st.title.toLowerCase().includes(keyword));
+              if (subTask) {
+                setTasks(prev => prev.map(task => {
+                  if (task.id !== t.id) return task;
+                  return {
+                    ...task,
+                    subTasks: task.subTasks.map(st => st.id === subTask.id ? { ...st, title: newTitle } : st)
+                  };
+                }));
+                return { result: `Renamed subtask in "${t.title}" to "${newTitle}".` };
+              }
+            }
+            return { result: `Could not find a task or subtask matching "${args.keyword}" to rename.` };
+          }
+          if (name === 'deleteTask') {
+            const keyword = args.keyword.toLowerCase();
+
+            // Search main tasks
+            const mainTask = tasksRef.current.find(t => t.title.toLowerCase().includes(keyword));
+            if (mainTask) {
+              deleteTask(mainTask.id);
+              return { result: `Deleted task "${mainTask.title}".` };
+            }
+
+            // Search subtasks
+            for (const t of tasksRef.current) {
+              const subTask = t.subTasks.find(st => st.title.toLowerCase().includes(keyword));
+              if (subTask) {
+                setTasks(prev => prev.map(task => {
+                  if (task.id !== t.id) return task;
+                  return {
+                    ...task,
+                    subTasks: task.subTasks.filter(st => st.id !== subTask.id)
+                  };
+                }));
+                return { result: `Deleted subtask "${subTask.title}" from "${t.title}".` };
+              }
+            }
+            return { result: `Could not find a task or subtask matching "${args.keyword}" to delete.` };
           }
           return { error: 'Unknown tool' };
         }
