@@ -1,20 +1,101 @@
+
 import { GoogleGenAI, Type, FunctionDeclaration, Modality, LiveServerMessage } from "@google/genai";
 import { createPcmBlob, base64ToBytes, decodeAudioData } from "./audioUtils";
+import { checkLocalAiAvailability, runLocalPrompt } from "./localAiService";
+import { AiProvider } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// --- Cloud Client Factory ---
 
-// --- Task Breakdown Service ---
-
-export const breakDownTask = async (taskTitle: string, existingSteps: string[] = []): Promise<string[]> => {
+const getCloudClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === "undefined" || apiKey.trim() === "") {
+    return null;
+  }
   try {
-    const contextStr = existingSteps.length > 0 
-      ? `Current steps already present: ${existingSteps.join(', ')}. ` 
+    return new GoogleGenAI({ apiKey });
+  } catch (e) {
+    console.error("Visionary Protocol: Failed to initialize cloud core.", e);
+    return null;
+  }
+};
+
+// --- Hybrid Task Breakdown Service ---
+
+/**
+ * Robust JSON extractor for AI responses. 
+ * Local models often add conversational fluff like "Here is the JSON:" which breaks JSON.parse.
+ */
+const extractJsonArray = (text: string): string[] => {
+  try {
+    // 1. Try direct parse
+    const json = JSON.parse(text);
+    if (Array.isArray(json)) return json.map((i: any) => i.step || i);
+    if (json.items) return json.items.map((i: any) => i.step || i);
+  } catch (e) {
+    // 2. Regex extraction for [ ... ]
+    const match = text.match(/\[[\s\S]*\]/);
+    if (match) {
+      try {
+        const json = JSON.parse(match[0]);
+        return json.map((i: any) => i.step || i);
+      } catch (e2) { /* continue */ }
+    }
+  }
+  // 3. Fallback: Split by newlines and remove numbering
+  return text.split('\n')
+    .map(line => line.replace(/^[\d-]+\.\s*/, '').trim())
+    .filter(line => line.length > 0 && !line.startsWith('{') && !line.startsWith('['));
+};
+
+export const breakDownTask = async (
+  taskTitle: string, 
+  existingSteps: string[] = [],
+  onStatusUpdate?: (provider: AiProvider, isDownloading: boolean) => void
+): Promise<string[]> => {
+  
+  const contextStr = existingSteps.length > 0 
+      ? `Current sub-items: ${existingSteps.join(', ')}. ` 
       : '';
+  
+  const prompt = `Task: "${taskTitle}". ${contextStr} Break this into 3-5 concise, actionable steps. Return strictly a JSON array of objects with a "step" property. Example: [{"step": "Do X"}, {"step": "Do Y"}]`;
+
+  // 1. Try Local AI (Gemini Nano)
+  try {
+    const localStatus = await checkLocalAiAvailability();
+    
+    if (localStatus !== 'no') {
+      if (onStatusUpdate) onStatusUpdate('LOCAL_NANO', localStatus === 'after-download');
       
+      console.log(`Visionary: Attempting Local Neural Core (${localStatus})...`);
+      
+      const localResponse = await runLocalPrompt(
+        "You are a task management assistant. Output valid JSON only.", 
+        prompt,
+        (loaded, total) => {
+            console.log(`Downloading Local Model: ${(loaded/total)*100}%`);
+            // We could bubble progress here if needed
+        }
+      );
+
+      const steps = extractJsonArray(localResponse);
+      if (steps.length > 0) return steps;
+    }
+  } catch (error) {
+    console.warn("Visionary: Local Core failed, switching to Cloud Uplink.", error);
+  }
+
+  // 2. Fallback to Cloud AI (Gemini Flash)
+  if (onStatusUpdate) onStatusUpdate('CLOUD_GEMINI', false);
+  const ai = getCloudClient();
+  if (!ai) return [];
+
+  try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Break down the following task into 3 to 6 smaller, concrete, actionable steps. ${contextStr}If the existing steps are already good, you can suggest adding to them or providing a completely refreshed, more efficient list. Keep them concise. Task: "${taskTitle}"`,
+      contents: `You are the Chief of Staff. Map the path. 
+      Break down the objective into 3 to 6 actionable steps. 
+      ${contextStr}
+      Task: "${taskTitle}"`,
       config: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -35,21 +116,23 @@ export const breakDownTask = async (taskTitle: string, existingSteps: string[] =
     const json = JSON.parse(text);
     return json.map((item: any) => item.step);
   } catch (error) {
-    console.error("Error breaking down task:", error);
+    console.error("Error breaking down task (Cloud):", error);
     return [];
   }
 };
 
-// --- Live Audio Service ---
+// --- Live Audio Service (Cloud Only) ---
+// Note: Local AI Audio streaming is not yet supported in standard browser APIs.
 
-interface LiveConnectionCallbacks {
+export interface LiveConnectionCallbacks {
   onOpen: () => void;
-  onClose: () => void;
-  onAudioData: (buffer: AudioBuffer) => void;
-  onTranscript: (user: string, model: string) => void;
-  onToolCall: (fnName: string, args: any) => Promise<any>;
+  onClose: (isUserClosing: boolean) => void;
+  onAudioData: (data: Uint8Array) => void;
+  onTranscript: (text: string) => void;
+  onVolumeLevel: (volume: number) => void;
+  onStatusChange?: (status: 'connecting' | 'connected' | 'error') => void;
   onError: (error: any) => void;
-  onVolumeLevel: (level: number) => void; // For visualization
+  onToolCall: (name: string, args: any) => Promise<any>;
 }
 
 export class LiveSessionManager {
@@ -61,190 +144,121 @@ export class LiveSessionManager {
   private nextStartTime: number = 0;
   private sources: Set<AudioBufferSourceNode> = new Set();
   private callbacks: LiveConnectionCallbacks;
+  private isUserClosing: boolean = false;
 
   constructor(callbacks: LiveConnectionCallbacks) {
     this.callbacks = callbacks;
   }
 
   async connect() {
-    this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-    this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const ai = getCloudClient();
+    if (!ai) {
+      this.callbacks.onError(new Error("Visionary Protocol Offline."));
+      return;
+    }
+
+    this.isUserClosing = false;
+    this.callbacks.onStatusChange?.('connecting');
     
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    const getTasksTool: FunctionDeclaration = {
-      name: 'getTasks',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Get a list of all current tasks and their subtasks to see the current state.',
-        properties: {},
-      }
-    };
-
-    const addTaskTool: FunctionDeclaration = {
-      name: 'addTask',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Add a new main todo task to the user\'s list.',
-        properties: {
-          title: {
-            type: Type.STRING,
-            description: 'The content/title of the task.',
-          },
-        },
-        required: ['title'],
-      },
-    };
-
-    const addSubTaskTool: FunctionDeclaration = {
-      name: 'addSubTask',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Add a specific subtask to an existing main task.',
-        properties: {
-          parentTaskKeyword: {
-            type: Type.STRING,
-            description: 'A keyword or title of the main task this subtask belongs to.',
-          },
-          subTaskTitle: {
-            type: Type.STRING,
-            description: 'The title of the subtask to add.',
-          },
-        },
-        required: ['parentTaskKeyword', 'subTaskTitle'],
-      },
-    };
-
-    const markTaskDoneTool: FunctionDeclaration = {
-      name: 'markTaskDone',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Mark a task or a subtask as completed by matching its title or keyword.',
-        properties: {
-          keyword: {
-             type: Type.STRING, 
-             description: 'A keyword to find the task or subtask to complete.' 
-          }
-        },
-        required: ['keyword']
-      }
-    };
-
-    const decomposeTaskTool: FunctionDeclaration = {
-      name: 'decomposeTask',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Automatically generate subtasks for a main task. Use this when the user asks for a plan, breakdown, or help starting. It considers existing subtasks if they exist.',
-        properties: {
-          taskTitle: {
-            type: Type.STRING,
-            description: 'The title of the task to break down.',
-          },
-        },
-        required: ['taskTitle'],
-      },
-    };
-
-    const renameTaskTool: FunctionDeclaration = {
-      name: 'renameTask',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Rename an existing task or subtask.',
-        properties: {
-          keyword: {
-            type: Type.STRING,
-            description: 'The current name or keyword of the task/subtask to rename.',
-          },
-          newTitle: {
-            type: Type.STRING,
-            description: 'The new title for the task/subtask.',
-          }
-        },
-        required: ['keyword', 'newTitle']
-      }
-    };
-
-    const deleteTaskTool: FunctionDeclaration = {
-      name: 'deleteTask',
-      parameters: {
-        type: Type.OBJECT,
-        description: 'Delete/Remove a task or subtask from the list.',
-        properties: {
-          keyword: {
-            type: Type.STRING,
-            description: 'The name or keyword of the task/subtask to delete.',
-          }
-        },
-        required: ['keyword']
-      }
-    };
-
-    this.sessionPromise = ai.live.connect({
-      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-      callbacks: {
-        onopen: () => {
-          this.callbacks.onOpen();
-          this.startAudioInputStream(stream);
-        },
-        onmessage: async (message: LiveServerMessage) => {
-          this.handleServerMessage(message);
-        },
-        onclose: () => {
-          this.callbacks.onClose();
-        },
-        onerror: (e) => {
-          this.callbacks.onError(e);
+    try {
+      this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const getTasksTool: FunctionDeclaration = {
+        name: 'getTasks',
+        parameters: {
+          type: Type.OBJECT,
+          description: 'Load the current state of the summit/goals.',
+          properties: {},
         }
-      },
-      config: {
-        responseModalities: [Modality.AUDIO],
-        tools: [{ functionDeclarations: [getTasksTool, addTaskTool, addSubTaskTool, markTaskDoneTool, decomposeTaskTool, renameTaskTool, deleteTaskTool] }],
-        systemInstruction: `You are Nebula, an AI productivity assistant.
+      };
 
-NEBULA CORE PROTOCOLS:
-1. DO NOT automatically decompose/break down a task when it is created.
-2. NO CONFIRMATION NEEDED for: 
-   - Adding new tasks ('addTask').
-   - Adding new subtasks ('addSubTask').
-   - Marking items as done ('markTaskDone').
-   - Initial breakdown of an empty task.
-3. VERBAL CONFIRMATION MANDATORY before calling tool for:
-   - DELETING any item.
-   - RENAMING any item.
-   - RE-DECOMPOSING: If 'getTasks' shows existing subtasks, you MUST ask for confirmation AND briefly explain WHY (e.g., "I see you have 3 steps, should I replace them with a more detailed plan?").
+      const addTaskTool: FunctionDeclaration = {
+        name: 'addTask',
+        parameters: {
+          type: Type.OBJECT,
+          description: 'Add a new objective or path marker.',
+          properties: {
+            title: { type: Type.STRING },
+            parentKeyword: { type: Type.STRING }
+          },
+          required: ['title'],
+        },
+      };
 
-CONTEXT AWARENESS: Use 'getTasks' to always see the current state. When breaking down a task that already has subtasks, integrate them or offer to refresh them. If refreshing/replacing, you MUST verify first.`,
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+      const markTaskDoneTool: FunctionDeclaration = {
+        name: 'markTaskDone',
+        parameters: {
+          type: Type.OBJECT,
+          description: 'Mark a goal as conquered.',
+          properties: { keyword: { type: Type.STRING } },
+          required: ['keyword']
         }
-      }
-    });
+      };
+
+      const decomposeTaskTool: FunctionDeclaration = {
+        name: 'decomposeTask',
+        parameters: {
+          type: Type.OBJECT,
+          description: 'Expand a high-level goal into actionable path markers.',
+          properties: { taskTitle: { type: Type.STRING } },
+          required: ['taskTitle'],
+        },
+      };
+
+      this.sessionPromise = ai.live.connect({
+        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        callbacks: {
+          onopen: () => {
+            this.callbacks.onStatusChange?.('connected');
+            this.callbacks.onOpen();
+            this.startAudioInputStream(stream);
+          },
+          onmessage: async (message: LiveServerMessage) => {
+            this.handleServerMessage(message);
+          },
+          onclose: () => this.callbacks.onClose(this.isUserClosing),
+          onerror: (e) => this.callbacks.onError(e)
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          tools: [{ functionDeclarations: [getTasksTool, addTaskTool, markTaskDoneTool, decomposeTaskTool] }],
+          systemInstruction: `You are the Visionary Co-Pilot. 
+Your user is a high-level thinker who focuses on outcomes, not details. 
+You are their Chief of Staff. You anticipate obstacles and handle the breakdown of complex goals.
+
+CORE DIRECTIVE:
+- When they mention a goal, suggest mapping the path (decomposeTask).
+- Keep conversations brief and momentum-oriented.
+- Always check the current status (getTasks) before acting.
+- Confirm completions with "Conquered" or "Summit reached" style language.`,
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+          }
+        }
+      });
+    } catch (err) {
+      this.callbacks.onStatusChange?.('error');
+      this.callbacks.onError(err);
+    }
   }
 
   private startAudioInputStream(stream: MediaStream) {
     if (!this.inputAudioContext) return;
-
     this.inputSource = this.inputAudioContext.createMediaStreamSource(stream);
     this.processor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
-
     this.processor.onaudioprocess = (e) => {
       const inputData = e.inputBuffer.getChannelData(0);
       let sum = 0;
-      for (let i = 0; i < inputData.length; i++) {
-        sum += inputData[i] * inputData[i];
-      }
-      const rms = Math.sqrt(sum / inputData.length);
-      this.callbacks.onVolumeLevel(rms);
-
+      for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
+      this.callbacks.onVolumeLevel(Math.sqrt(sum / inputData.length));
       const pcmBlob = createPcmBlob(inputData);
-      
       if (this.sessionPromise) {
-        this.sessionPromise.then((session) => {
-          session.sendRealtimeInput({ media: pcmBlob });
-        });
+        this.sessionPromise.then((session) => session.sendRealtimeInput({ media: pcmBlob }));
       }
     };
-
     this.inputSource.connect(this.processor);
     this.processor.connect(this.inputAudioContext.destination);
   }
@@ -252,69 +266,35 @@ CONTEXT AWARENESS: Use 'getTasks' to always see the current state. When breaking
   private async handleServerMessage(message: LiveServerMessage) {
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio && this.outputAudioContext) {
-       this.callbacks.onVolumeLevel(0.5);
        this.nextStartTime = Math.max(this.outputAudioContext.currentTime, this.nextStartTime);
        const audioBuffer = await decodeAudioData(base64ToBytes(base64Audio), this.outputAudioContext, 24000);
        const source = this.outputAudioContext.createBufferSource();
        source.buffer = audioBuffer;
        source.connect(this.outputAudioContext.destination);
-       source.addEventListener('ended', () => {
-         this.sources.delete(source);
-         this.callbacks.onVolumeLevel(0);
-       });
+       source.addEventListener('ended', () => this.sources.delete(source));
        source.start(this.nextStartTime);
        this.nextStartTime += audioBuffer.duration;
        this.sources.add(source);
     }
-
-    if (message.serverContent?.interrupted) {
-      this.stopAllSources();
-    }
-
     if (message.toolCall) {
       for (const fc of message.toolCall.functionCalls) {
         let result: any = { status: 'ok' };
-        try {
-          result = await this.callbacks.onToolCall(fc.name, fc.args);
-        } catch (err) {
-          result = { error: (err as Error).message };
-        }
+        try { result = await this.callbacks.onToolCall(fc.name, fc.args); } 
+        catch (err) { result = { error: (err as Error).message }; }
         if (this.sessionPromise) {
           this.sessionPromise.then(session => {
-            session.sendToolResponse({
-              functionResponses: {
-                id: fc.id,
-                name: fc.name,
-                response: { result }
-              }
-            });
+            session.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result } } });
           });
         }
       }
     }
   }
 
-  private stopAllSources() {
-    for (const source of this.sources) {
-      source.stop();
-    }
-    this.sources.clear();
-    this.nextStartTime = 0;
-  }
-
   disconnect() {
-    if (this.processor) {
-      this.processor.disconnect();
-      this.processor.onaudioprocess = null;
-    }
-    if (this.inputSource) {
-      this.inputSource.disconnect();
-    }
-    if (this.inputAudioContext) {
-      this.inputAudioContext.close();
-    }
-    if (this.outputAudioContext) {
-      this.outputAudioContext.close();
-    }
+    this.isUserClosing = true;
+    if (this.processor) this.processor.disconnect();
+    if (this.inputSource) this.inputSource.disconnect();
+    if (this.inputAudioContext) this.inputAudioContext.close();
+    if (this.outputAudioContext) this.outputAudioContext.close();
   }
 }
