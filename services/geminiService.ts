@@ -276,14 +276,15 @@ CORE DIRECTIVE:
        this.nextStartTime += audioBuffer.duration;
        this.sources.add(source);
     }
-    if (message.toolCall) {
+    if (message.toolCall?.functionCalls) {
       for (const fc of message.toolCall.functionCalls) {
+        if (!fc.name) continue;
         let result: any = { status: 'ok' };
         try { result = await this.callbacks.onToolCall(fc.name, fc.args); } 
         catch (err) { result = { error: (err as Error).message }; }
         if (this.sessionPromise) {
           this.sessionPromise.then(session => {
-            session.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result } } });
+            session.sendToolResponse({ functionResponses: [{ id: fc.id, name: fc.name!, response: { result } }] });
           });
         }
       }
