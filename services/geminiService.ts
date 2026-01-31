@@ -184,10 +184,10 @@ export class LiveSessionManager {
         name: 'addTask',
         parameters: {
           type: Type.OBJECT,
-          description: 'Add a new objective or path marker.',
+          description: 'Add a new objective, path marker, or actionable suggestion to the summit list.',
           properties: {
-            title: { type: Type.STRING },
-            parentKeyword: { type: Type.STRING }
+            title: { type: Type.STRING, description: 'The concise, actionable title of the goal or step.' },
+            parentKeyword: { type: Type.STRING, description: 'The title or keyword of an existing parent goal to nest this under.' }
           },
           required: ['title'],
         },
@@ -197,8 +197,8 @@ export class LiveSessionManager {
         name: 'markTaskDone',
         parameters: {
           type: Type.OBJECT,
-          description: 'Mark a goal as conquered.',
-          properties: { keyword: { type: Type.STRING } },
+          description: 'Mark a specific goal or path marker as conquered/completed.',
+          properties: { keyword: { type: Type.STRING, description: 'A keyword from the goal title to identify it.' } },
           required: ['keyword']
         }
       };
@@ -207,8 +207,8 @@ export class LiveSessionManager {
         name: 'decomposeTask',
         parameters: {
           type: Type.OBJECT,
-          description: 'Expand a high-level goal into actionable path markers.',
-          properties: { taskTitle: { type: Type.STRING } },
+          description: 'Use intelligence to break a complex goal into 3-6 actionable sub-steps.',
+          properties: { taskTitle: { type: Type.STRING, description: 'The title of the high-level goal to expand.' } },
           required: ['taskTitle'],
         },
       };
@@ -232,13 +232,18 @@ export class LiveSessionManager {
           tools: [{ functionDeclarations: [getTasksTool, addTaskTool, markTaskDoneTool, decomposeTaskTool] }],
           systemInstruction: `You are the Visionary Co-Pilot. 
 Your user is a high-level thinker who focuses on outcomes, not details. 
-You are their Chief of Staff. You anticipate obstacles and handle the breakdown of complex goals.
 
-CORE DIRECTIVE:
-- When they mention a goal, suggest mapping the path (decomposeTask).
-- Keep conversations brief and momentum-oriented.
-- Always check the current status (getTasks) before acting.
-- Confirm completions with "Conquered" or "Summit reached" style language.`,
+CORE MISSION:
+You are their Chief of Staff. You are responsible for RECORDING all actionable advice into the task list. 
+
+OPERATIONAL PROTOCOL:
+1. RECORD EVERYTHING: Whenever you give advice, suggest a step, or identify an obstacle, immediately call 'addTask' to put it in the UI. Do not wait for them to ask.
+2. ANTICIPATE: If a goal is complex, suggest mapping the path using 'decomposeTask'.
+3. STAY HIGH-LEVEL: Keep your spoken voice brief and inspiring. Let the UI handle the details.
+4. CONTEXT: Use 'getTasks' at the start or when unsure of the current state.
+5. MOMENTUM: When a goal is mentioned as finished, use 'markTaskDone' and celebrate.
+
+Always be proactive. If you see a path, map it. If you hear a goal, record it.`,
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
           }

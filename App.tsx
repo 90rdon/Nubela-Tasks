@@ -415,16 +415,23 @@ export default function App() {
             if (name === 'addTask') {
               const parent = args.parentKeyword ? findByKeyword(tasksRef.current, args.parentKeyword) : null;
               addItem(args.title, parent?.id);
+              showToast(`Goal Added: ${args.title}`, "success");
               return { status: 'added' };
             }
             if (name === 'markTaskDone') {
               const match = findByKeyword(tasksRef.current, args.keyword);
-              if (match) toggleComplete(match.id);
+              if (match) {
+                toggleComplete(match.id);
+                showToast(`Task Conquered: ${match.title}`, "success");
+              }
               return { status: 'completed' };
             }
             if (name === 'decomposeTask') {
               const match = findByKeyword(tasksRef.current, args.taskTitle);
-              if (match) handleBreakdownNode(match.id);
+              if (match) {
+                handleBreakdownNode(match.id);
+                showToast(`Mapping Path for: ${match.title}`, "info");
+              }
               return { status: 'vision_expanded' };
             }
             return { error: 'Unknown tool' };
