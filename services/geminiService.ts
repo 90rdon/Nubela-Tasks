@@ -48,32 +48,32 @@ const extractJsonArray = (text: string): string[] => {
 };
 
 export const breakDownTask = async (
-  taskTitle: string, 
+  taskTitle: string,
   existingSteps: string[] = [],
   onStatusUpdate?: (provider: AiProvider, isDownloading: boolean) => void
 ): Promise<string[]> => {
-  
-  const contextStr = existingSteps.length > 0 
-      ? `Current sub-items: ${existingSteps.join(', ')}. ` 
-      : '';
-  
+
+  const contextStr = existingSteps.length > 0
+    ? `Current sub-items: ${existingSteps.join(', ')}. `
+    : '';
+
   const prompt = `Task: "${taskTitle}". ${contextStr} Break this into 3-5 concise, actionable steps. Return strictly a JSON array of objects with a "step" property. Example: [{"step": "Do X"}, {"step": "Do Y"}]`;
 
   // 1. Try Local AI (Gemini Nano)
   try {
     const localStatus = await checkLocalAiAvailability();
-    
+
     if (localStatus !== 'no') {
       if (onStatusUpdate) onStatusUpdate('LOCAL_NANO', localStatus === 'after-download');
-      
+
       console.log(`Visionary: Attempting Local Neural Core (${localStatus})...`);
-      
+
       const localResponse = await runLocalPrompt(
-        "You are a task management assistant. Output valid JSON only.", 
+        "You are a task management assistant. Output valid JSON only.",
         prompt,
         (loaded, total) => {
-            console.log(`Downloading Local Model: ${(loaded/total)*100}%`);
-            // We could bubble progress here if needed
+          console.log(`Downloading Local Model: ${(loaded / total) * 100}%`);
+          // We could bubble progress here if needed
         }
       );
 
@@ -112,7 +112,7 @@ export const breakDownTask = async (
 
     const text = response.text;
     if (!text) return [];
-    
+
     const json = JSON.parse(text);
     return json.map((item: any) => item.step);
   } catch (error) {
@@ -159,13 +159,18 @@ export class LiveSessionManager {
 
     this.isUserClosing = false;
     this.callbacks.onStatusChange?.('connecting');
-    
+
     try {
+      // Create Contexts - iPhone Safari requires these on user action
       this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      
+
+      // Explicitly resume for Safari compatibility
+      if (this.inputAudioContext.state === 'suspended') await this.inputAudioContext.resume();
+      if (this.outputAudioContext.state === 'suspended') await this.outputAudioContext.resume();
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       const getTasksTool: FunctionDeclaration = {
         name: 'getTasks',
         parameters: {
@@ -240,6 +245,7 @@ CORE DIRECTIVE:
         }
       });
     } catch (err) {
+      console.error("Live Session Error:", err);
       this.callbacks.onStatusChange?.('error');
       this.callbacks.onError(err);
     }
@@ -250,13 +256,20 @@ CORE DIRECTIVE:
     this.inputSource = this.inputAudioContext.createMediaStreamSource(stream);
     this.processor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
     this.processor.onaudioprocess = (e) => {
+      // Safety: Don't process if context is closed or suspended
+      if (!this.inputAudioContext || this.inputAudioContext.state === 'suspended') return;
+
       const inputData = e.inputBuffer.getChannelData(0);
       let sum = 0;
       for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
       this.callbacks.onVolumeLevel(Math.sqrt(sum / inputData.length));
+
       const pcmBlob = createPcmBlob(inputData);
       if (this.sessionPromise) {
-        this.sessionPromise.then((session) => session.sendRealtimeInput({ media: pcmBlob }));
+        this.sessionPromise.then((session) => {
+          try { session.sendRealtimeInput({ media: pcmBlob }); }
+          catch (e) { /* connection might be closing */ }
+        });
       }
     };
     this.inputSource.connect(this.processor);
@@ -266,21 +279,22 @@ CORE DIRECTIVE:
   private async handleServerMessage(message: LiveServerMessage) {
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio && this.outputAudioContext) {
-       this.nextStartTime = Math.max(this.outputAudioContext.currentTime, this.nextStartTime);
-       const audioBuffer = await decodeAudioData(base64ToBytes(base64Audio), this.outputAudioContext, 24000);
-       const source = this.outputAudioContext.createBufferSource();
-       source.buffer = audioBuffer;
-       source.connect(this.outputAudioContext.destination);
-       source.addEventListener('ended', () => this.sources.delete(source));
-       source.start(this.nextStartTime);
-       this.nextStartTime += audioBuffer.duration;
-       this.sources.add(source);
+      if (this.outputAudioContext.state === 'suspended') await this.outputAudioContext.resume();
+      this.nextStartTime = Math.max(this.outputAudioContext.currentTime, this.nextStartTime);
+      const audioBuffer = await decodeAudioData(base64ToBytes(base64Audio), this.outputAudioContext, 24000);
+      const source = this.outputAudioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.outputAudioContext.destination);
+      source.addEventListener('ended', () => this.sources.delete(source));
+      source.start(this.nextStartTime);
+      this.nextStartTime += audioBuffer.duration;
+      this.sources.add(source);
     }
     if (message.toolCall?.functionCalls) {
       for (const fc of message.toolCall.functionCalls) {
         if (!fc.name) continue;
         let result: any = { status: 'ok' };
-        try { result = await this.callbacks.onToolCall(fc.name, fc.args); } 
+        try { result = await this.callbacks.onToolCall(fc.name, fc.args); }
         catch (err) { result = { error: (err as Error).message }; }
         if (this.sessionPromise) {
           this.sessionPromise.then(session => {
@@ -291,11 +305,35 @@ CORE DIRECTIVE:
     }
   }
 
-  disconnect() {
+  async disconnect() {
     this.isUserClosing = true;
-    if (this.processor) this.processor.disconnect();
-    if (this.inputSource) this.inputSource.disconnect();
-    if (this.inputAudioContext) this.inputAudioContext.close();
-    if (this.outputAudioContext) this.outputAudioContext.close();
+
+    if (this.processor) {
+      this.processor.disconnect();
+      this.processor = null;
+    }
+
+    if (this.inputSource) {
+      const stream = this.inputSource.mediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      this.inputSource.disconnect();
+      this.inputSource = null;
+    }
+
+    this.sources.forEach(source => {
+      try { source.stop(); } catch (e) { }
+    });
+    this.sources.clear();
+
+    if (this.inputAudioContext) {
+      await this.inputAudioContext.close().catch(() => { });
+      this.inputAudioContext = null;
+    }
+    if (this.outputAudioContext) {
+      await this.outputAudioContext.close().catch(() => { });
+      this.outputAudioContext = null;
+    }
+
+    this.sessionPromise = null;
   }
 }

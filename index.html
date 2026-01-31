@@ -1,78 +1,170 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Visionary.me</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Space Grotesk', 'sans-serif'],
-            },
-            colors: {
-              nebula: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                200: '#bae6fd',
-                300: '#7dd3fc',
-                400: '#38bdf8',
-                500: '#0ea5e9',
-                600: '#0284c7',
-                700: '#0369a1',
-                800: '#075985',
-                900: '#0c4a6e',
-                950: '#082f49',
-              },
-              void: '#030712',
-              glass: 'rgba(255, 255, 255, 0.05)'
-            },
-            animation: {
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'float': 'float 6s ease-in-out infinite',
-            },
-            keyframes: {
-              float: {
-                '0%, 100%': { transform: 'translateY(0)' },
-                '50%': { transform: 'translateY(-10px)' },
-              }
-            }
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+  <title>Visionary.me</title>
+  <!-- Pre-connect font domains for speed -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Space Grotesk', 'sans-serif'],
           },
+          colors: {
+            nebula: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+              950: '#082f49',
+            },
+            void: '#030712',
+            glass: 'rgba(255, 255, 255, 0.05)'
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'float': 'float 6s ease-in-out infinite',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-10px)' },
+            }
+          }
         },
+      },
+    }
+  </script>
+  <style>
+    body {
+      background-color: #030712;
+      color: #e2e8f0;
+      overflow-x: hidden;
+      margin: 0;
+    }
+
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* --- Initial Loader Styles --- */
+    #initial-loader {
+      position: fixed;
+      inset: 0;
+      background: #030712;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease-out;
+    }
+
+    .loader-orb {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, #38bdf8 0%, #0369a1 100%);
+      box-shadow: 0 0 40px rgba(56, 189, 248, 0.4);
+      animation: orb-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes orb-pulse {
+
+      0%,
+      100% {
+        transform: scale(0.9);
+        opacity: 0.5;
+        filter: blur(2px);
       }
-    </script>
-    <style>
-      body {
-        background-color: #030712;
-        color: #e2e8f0;
-        overflow-x: hidden;
+
+      50% {
+        transform: scale(1.1);
+        opacity: 1;
+        filter: blur(0px);
       }
-      .glass-panel {
-        background: rgba(17, 24, 39, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .loader-text {
+      margin-top: 24px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #7dd3fc;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Initial Loading Overlay -->
+  <div id="initial-loader">
+    <div class="loader-orb"></div>
+    <div class="loader-text">Aligning Vision</div>
+  </div>
+
+  <div id="root"></div>
+
+  <script type="module" src="./index.tsx"></script>
+
+  <script>
+    // Automatically hide the loader when React starts rendering
+    const root = document.getElementById('root');
+    const loader = document.getElementById('initial-loader');
+
+    const observer = new MutationObserver(() => {
+      if (root.children.length > 0) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
+        observer.disconnect();
       }
-      ::-webkit-scrollbar {
-        width: 8px;
+    });
+    observer.observe(root, { childList: true });
+
+    // Safety timeout after 10 seconds
+    setTimeout(() => {
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
       }
-      ::-webkit-scrollbar-track {
-        background: #0f172a; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #334155; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #475569; 
-      }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
-  </body>
+    }, 10000);
+  </script>
+</body>
+
 </html>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { 
-  Plus, Mic, MicOff, Brain, Check, Trash2, ChevronDown, 
+import {
+  Plus, Mic, MicOff, Brain, Check, Trash2, ChevronDown,
   ChevronRight, Loader2, Maximize2, Minimize2, ChevronLeft,
   X, Sparkles, AlertCircle, RefreshCw, ShieldAlert, Cpu, CloudLightning
 } from 'lucide-react';
@@ -91,7 +91,7 @@ interface TaskNodeProps {
   activeProvider: AiProvider | null;
 }
 
-const TaskNode: React.FC<TaskNodeProps> = ({ 
+const TaskNode: React.FC<TaskNodeProps> = ({
   item, depth, editingId, editValue, focusedId, setEditValue, saveEdit,
   startEditing, toggleComplete, setFocusedId, handleBreakdownNode, deleteItem, addItem, setTasks, isAiDisabled, activeProvider
 }) => {
@@ -101,16 +101,16 @@ const TaskNode: React.FC<TaskNodeProps> = ({
 
   return (
     <div className={`mt-3 ${depth > 0 ? 'ml-4 md:ml-6 border-l border-slate-700/50 pl-4' : ''}`}>
-      <div 
+      <div
         className={`group flex items-start gap-3 p-4 glass-panel rounded-2xl transition-all duration-300 ${isFocused ? 'ring-2 ring-nebula-500/50 shadow-2xl shadow-nebula-500/10' : 'hover:border-slate-500/40 shadow-lg'}`}
         onDoubleClick={(e) => { e.stopPropagation(); startEditing(item); }}
-        onClick={(e) => { 
-          if (e.detail === 1) { 
+        onClick={(e) => {
+          if (e.detail === 1) {
             setTasks(prev => updateInTree(prev, item.id, it => ({ ...it, isExpanded: !it.isExpanded })));
           }
         }}
       >
-        <button 
+        <button
           onClick={(e) => { e.stopPropagation(); toggleComplete(item.id); }}
           className={`mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${item.completed ? 'bg-nebula-500 border-nebula-500 text-white shadow-nebula-500/50' : 'border-slate-600 hover:border-nebula-400'}`}
         >
@@ -120,7 +120,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
         <div className="flex-1 min-w-0 flex flex-col pt-0.5">
           <div className="flex items-center gap-2">
             {isEditing ? (
-              <input 
+              <input
                 autoFocus
                 className="bg-slate-900/80 text-slate-100 border border-nebula-500 rounded-lg px-2 py-0.5 outline-none w-full"
                 value={editValue}
@@ -148,7 +148,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
         </div>
 
         <div className="flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); setFocusedId(isFocused ? null : item.id); }}
             className={`p-2 rounded-xl hover:bg-white/10 transition-colors ${isFocused ? 'text-nebula-400' : 'text-slate-500 hover:text-nebula-300'}`}
             title={isFocused ? "Broaden View" : "Focus on this objective"}
@@ -156,7 +156,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
             {isFocused ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
           {!isAiDisabled && (
-            <button 
+            <button
               onClick={(e) => { e.stopPropagation(); handleBreakdownNode(item.id); }}
               className="p-2 rounded-xl hover:bg-white/10 text-slate-500 hover:text-nebula-400 transition-colors"
               title="Reveal Path"
@@ -164,7 +164,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
               <Brain size={18} />
             </button>
           )}
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
             className="p-2 rounded-xl hover:bg-white/10 text-slate-500 hover:text-red-400 transition-colors"
           >
@@ -178,7 +178,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
           {!item.completed && (
             <div className="mt-3 ml-4 md:ml-6 pl-4 flex items-center gap-3 group/add">
               <Plus size={10} className="text-slate-700" />
-              <input 
+              <input
                 placeholder="Add to the vision..."
                 className="bg-transparent text-sm text-slate-400 focus:text-slate-200 outline-none w-full placeholder:text-slate-700"
                 onKeyDown={e => {
@@ -190,31 +190,31 @@ const TaskNode: React.FC<TaskNodeProps> = ({
               />
             </div>
           )}
-          
+
           {item.isBreakingDown ? (
             <div className="flex items-center gap-3 py-4 px-8 text-xs text-nebula-300 font-medium">
-              <Loader2 size={14} className="animate-spin text-nebula-500" /> 
+              <Loader2 size={14} className="animate-spin text-nebula-500" />
               <span>
                 {activeProvider === 'LOCAL_NANO' ? "Neural Core (Local) Processing..." : "Aligning Path via Cloud..."}
               </span>
             </div>
           ) : (
             item.subTasks.map(sub => (
-              <TaskNode 
-                key={sub.id} 
-                item={sub} 
-                depth={depth + 1} 
-                editingId={editingId} 
-                editValue={editValue} 
-                focusedId={focusedId} 
-                setEditValue={setEditValue} 
-                saveEdit={saveEdit} 
-                startEditing={startEditing} 
-                toggleComplete={toggleComplete} 
-                setFocusedId={setFocusedId} 
-                handleBreakdownNode={handleBreakdownNode} 
-                deleteItem={deleteItem} 
-                addItem={addItem} 
+              <TaskNode
+                key={sub.id}
+                item={sub}
+                depth={depth + 1}
+                editingId={editingId}
+                editValue={editValue}
+                focusedId={focusedId}
+                setEditValue={setEditValue}
+                saveEdit={saveEdit}
+                startEditing={startEditing}
+                toggleComplete={toggleComplete}
+                setFocusedId={setFocusedId}
+                handleBreakdownNode={handleBreakdownNode}
+                deleteItem={deleteItem}
+                addItem={addItem}
                 setTasks={setTasks}
                 isAiDisabled={isAiDisabled}
                 activeProvider={activeProvider}
@@ -240,11 +240,11 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [toast, setToast] = useState<{ message: string, type: 'error' | 'info' | 'success' } | null>(null);
-  
+
   // Track which AI is doing the work
   const [lastUsedProvider, setLastUsedProvider] = useState<AiProvider | null>(null);
   const [isModelDownloading, setIsModelDownloading] = useState(false);
-  
+
   const tasksRef = useRef<TaskItem[]>([]);
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
 
@@ -263,7 +263,7 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('visionary-tasks-v1');
     if (saved) {
-      try { setTasks(JSON.parse(saved)); } 
+      try { setTasks(JSON.parse(saved)); }
       catch (e) { console.error("Failed to load saved tasks:", e); }
     }
   }, []);
@@ -322,22 +322,22 @@ export default function App() {
     // If we have local AI, we can proceed even without an API Key.
     // If no local AI and no API Key, then fail.
     // The breakDownTask function handles the fallback logic internally.
-    
+
     const target = findInTree(tasksRef.current, id);
     if (!target) return;
     setTasks(prev => updateInTree(prev, id, item => ({ ...item, isBreakingDown: true })));
-    
+
     // Pass callback to update UI about who is working
     const steps = await breakDownTask(
-        target.title, 
-        target.subTasks.map(s => s.title),
-        (provider, isDownloading) => {
-            setLastUsedProvider(provider);
-            setIsModelDownloading(isDownloading);
-            if (isDownloading) showToast("Downloading Local AI Model...", "info");
-        }
+      target.title,
+      target.subTasks.map(s => s.title),
+      (provider, isDownloading) => {
+        setLastUsedProvider(provider);
+        setIsModelDownloading(isDownloading);
+        if (isDownloading) showToast("Downloading Local AI Model...", "info");
+      }
     );
-    
+
     setTasks(prev => updateInTree(prev, id, item => ({
       ...item,
       isBreakingDown: false,
@@ -346,68 +346,98 @@ export default function App() {
         id: crypto.randomUUID(), title: s, completed: false, isBreakingDown: false, isExpanded: true, subTasks: [], createdAt: Date.now()
       }))
     })));
-    
+
     setIsModelDownloading(false);
   }, [showToast]);
+
+  const isConnectingRef = useRef(false);
 
   const toggleVoiceMode = async () => {
     if (isAiDisabled) {
       showToast("Voice core requires a valid API Protocol.", "error");
       return;
     }
+
+    if (isConnectingRef.current) return;
+
     if (isVoiceActive || voiceStatus !== VoiceStatus.IDLE) {
-      liveSessionRef.current?.disconnect();
-      liveSessionRef.current = null;
-      setIsVoiceActive(false);
-      setVoiceMode(VisualizerMode.IDLE);
-      setVoiceStatus(VoiceStatus.IDLE);
+      isConnectingRef.current = true;
+      setVoiceStatus(VoiceStatus.CONNECTING); // Show closing state
+
+      try {
+        await liveSessionRef.current?.disconnect();
+      } finally {
+        liveSessionRef.current = null;
+        setIsVoiceActive(false);
+        setVoiceMode(VisualizerMode.IDLE);
+        setVoiceStatus(VoiceStatus.IDLE);
+        isConnectingRef.current = false;
+      }
     } else {
+      isConnectingRef.current = true;
       setVoiceStatus(VoiceStatus.CONNECTING);
       setVoiceMode(VisualizerMode.THINKING);
-      // Voice always uses Cloud for now
-      setLastUsedProvider('CLOUD_GEMINI'); 
-      const manager = new LiveSessionManager({
-        onOpen: () => { 
-          setIsVoiceActive(true); 
-          setVoiceMode(VisualizerMode.LISTENING);
-          setVoiceStatus(VoiceStatus.CONNECTED);
-          showToast("Visionary Aligned.", "success");
-        },
-        onClose: () => { setIsVoiceActive(false); setVoiceStatus(VoiceStatus.IDLE); },
-        onAudioData: () => {},
-        onTranscript: () => {},
-        onVolumeLevel: setAudioVolume,
-        onStatusChange: (status) => {
-          if (status === 'connecting') setVoiceStatus(VoiceStatus.CONNECTING);
-          if (status === 'connected') setVoiceStatus(VoiceStatus.CONNECTED);
-        },
-        onError: (err) => { 
-          showToast("Core Link Failure.", "error");
-          setVoiceStatus(VoiceStatus.ERROR);
-          setTimeout(() => setVoiceStatus(VoiceStatus.IDLE), 3000);
-        },
-        onToolCall: async (name, args) => {
-          if (name === 'getTasks') return tasksRef.current;
-          if (name === 'addTask') {
-            const parent = args.parentKeyword ? findByKeyword(tasksRef.current, args.parentKeyword) : null;
-            addItem(args.title, parent?.id);
-            return { status: 'added' };
+
+      try {
+        // Voice always uses Cloud for now
+        setLastUsedProvider('CLOUD_GEMINI');
+
+        const manager = new LiveSessionManager({
+          onOpen: () => {
+            setIsVoiceActive(true);
+            setVoiceMode(VisualizerMode.LISTENING);
+            setVoiceStatus(VoiceStatus.CONNECTED);
+            showToast("Visionary Aligned.", "success");
+            isConnectingRef.current = false;
+          },
+          onClose: (wasUserClosing) => {
+            setIsVoiceActive(false);
+            setVoiceStatus(VoiceStatus.IDLE);
+            if (!wasUserClosing) showToast("Connection Reset.", "info");
+            isConnectingRef.current = false;
+          },
+          onAudioData: () => { },
+          onTranscript: () => { },
+          onVolumeLevel: setAudioVolume,
+          onStatusChange: (status) => {
+            if (status === 'connecting') setVoiceStatus(VoiceStatus.CONNECTING);
+            if (status === 'connected') setVoiceStatus(VoiceStatus.CONNECTED);
+          },
+          onError: (err) => {
+            console.error("Voice Error:", err);
+            showToast("Core Link Failure.", "error");
+            setVoiceStatus(VoiceStatus.ERROR);
+            isConnectingRef.current = false;
+            setTimeout(() => setVoiceStatus(VoiceStatus.IDLE), 3000);
+          },
+          onToolCall: async (name, args) => {
+            if (name === 'getTasks') return tasksRef.current;
+            if (name === 'addTask') {
+              const parent = args.parentKeyword ? findByKeyword(tasksRef.current, args.parentKeyword) : null;
+              addItem(args.title, parent?.id);
+              return { status: 'added' };
+            }
+            if (name === 'markTaskDone') {
+              const match = findByKeyword(tasksRef.current, args.keyword);
+              if (match) toggleComplete(match.id);
+              return { status: 'completed' };
+            }
+            if (name === 'decomposeTask') {
+              const match = findByKeyword(tasksRef.current, args.taskTitle);
+              if (match) handleBreakdownNode(match.id);
+              return { status: 'vision_expanded' };
+            }
+            return { error: 'Unknown tool' };
           }
-          if (name === 'markTaskDone') {
-            const match = findByKeyword(tasksRef.current, args.keyword);
-            if (match) toggleComplete(match.id);
-            return { status: 'completed' };
-          }
-          if (name === 'decomposeTask') {
-            const match = findByKeyword(tasksRef.current, args.taskTitle);
-            if (match) handleBreakdownNode(match.id);
-            return { status: 'vision_expanded' };
-          }
-          return { error: 'Unknown tool' };
-        }
-      });
-      await manager.connect();
-      liveSessionRef.current = manager;
+        });
+
+        await manager.connect();
+        liveSessionRef.current = manager;
+      } catch (e) {
+        console.error("Failed to connect:", e);
+        isConnectingRef.current = false;
+        setVoiceStatus(VoiceStatus.IDLE);
+      }
     }
   };
 
@@ -420,17 +450,17 @@ export default function App() {
 
       {/* Intelligence Source Indicator */}
       <div className="fixed top-4 right-4 md:right-8 z-20 flex gap-2">
-         {lastUsedProvider === 'LOCAL_NANO' && (
-             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider ${isModelDownloading ? 'animate-pulse' : ''}`}>
-                 <Cpu size={14} /> 
-                 {isModelDownloading ? "Acquiring Neural Core..." : "Local Neural Core"}
-             </div>
-         )}
-         {lastUsedProvider === 'CLOUD_GEMINI' && (
-             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-nebula-500/20 bg-nebula-500/10 text-nebula-400 text-xs font-bold uppercase tracking-wider">
-                 <CloudLightning size={14} /> Cloud Uplink
-             </div>
-         )}
+        {lastUsedProvider === 'LOCAL_NANO' && (
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider ${isModelDownloading ? 'animate-pulse' : ''}`}>
+            <Cpu size={14} />
+            {isModelDownloading ? "Acquiring Neural Core..." : "Local Neural Core"}
+          </div>
+        )}
+        {lastUsedProvider === 'CLOUD_GEMINI' && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-nebula-500/20 bg-nebula-500/10 text-nebula-400 text-xs font-bold uppercase tracking-wider">
+            <CloudLightning size={14} /> Cloud Uplink
+          </div>
+        )}
       </div>
 
       {/* API Protocol Guard Banner */}
@@ -463,15 +493,15 @@ export default function App() {
               Architect of Ambition
             </p>
           </div>
-          <Button 
-            variant={isVoiceActive ? "voice" : "secondary"} 
+          <Button
+            variant={isVoiceActive ? "voice" : "secondary"}
             onClick={toggleVoiceMode}
             disabled={isAiDisabled}
             className="rounded-full w-14 h-14 !p-0 shadow-2xl"
           >
-            {voiceStatus === VoiceStatus.IDLE ? <Mic size={24} /> : 
-             voiceStatus === VoiceStatus.CONNECTING ? <Loader2 className="animate-spin" size={24} /> :
-             <MicOff size={24} />}
+            {voiceStatus === VoiceStatus.IDLE ? <Mic size={24} /> :
+              voiceStatus === VoiceStatus.CONNECTING ? <Loader2 className="animate-spin" size={24} /> :
+                <MicOff size={24} />}
           </Button>
         </header>
 
@@ -486,14 +516,14 @@ export default function App() {
         )}
 
         <div className="mb-8 relative group">
-          <input 
+          <input
             value={newTaskTitle}
             onChange={e => setNewTaskTitle(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && newTaskTitle.trim()) { addItem(newTaskTitle.trim(), focusedId || undefined); setNewTaskTitle(''); } }}
             placeholder={focusedId ? `Expanding "${focusedItem?.title}"...` : "What's the next big goal?"}
             className="w-full bg-slate-900/40 border border-slate-700/30 backdrop-blur-xl rounded-2xl py-4 pl-6 pr-16 outline-none focus:ring-2 focus:ring-nebula-500/40 shadow-2xl text-lg placeholder:text-slate-700"
           />
-          <button 
+          <button
             onClick={() => { if (newTaskTitle.trim()) { addItem(newTaskTitle.trim(), focusedId || undefined); setNewTaskTitle(''); } }}
             className="absolute right-3 top-2.5 p-2.5 bg-nebula-600 hover:bg-nebula-500 text-white rounded-xl transition-all shadow-xl active:scale-90"
           >
@@ -519,21 +549,21 @@ export default function App() {
 
         <div className="space-y-4 pb-32">
           {displayItems.map(item => (
-            <TaskNode 
-              key={item.id} 
-              item={item} 
-              depth={0} 
-              editingId={editingId} 
-              editValue={editValue} 
-              focusedId={focusedId} 
-              setEditValue={setEditValue} 
-              saveEdit={saveEdit} 
-              startEditing={startEditing} 
-              toggleComplete={toggleComplete} 
-              setFocusedId={setFocusedId} 
-              handleBreakdownNode={handleBreakdownNode} 
-              deleteItem={deleteItem} 
-              addItem={addItem} 
+            <TaskNode
+              key={item.id}
+              item={item}
+              depth={0}
+              editingId={editingId}
+              editValue={editValue}
+              focusedId={focusedId}
+              setEditValue={setEditValue}
+              saveEdit={saveEdit}
+              startEditing={startEditing}
+              toggleComplete={toggleComplete}
+              setFocusedId={setFocusedId}
+              handleBreakdownNode={handleBreakdownNode}
+              deleteItem={deleteItem}
+              addItem={addItem}
               setTasks={setTasks}
               isAiDisabled={isAiDisabled}
               activeProvider={lastUsedProvider}
@@ -549,7 +579,7 @@ export default function App() {
           )}
         </div>
       </div>
-      
+
       {focusedId && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 animate-fade-in">
           <Button variant="secondary" onClick={() => setFocusedId(null)} icon={Minimize2} className="rounded-full px-8 py-4 shadow-2xl border-nebula-500/50 border-2 text-nebula-100 font-bold">
